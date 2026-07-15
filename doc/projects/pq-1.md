@@ -10,7 +10,7 @@ Położyć fundament, na którym stają pq-2…pq-6: strukturę solution, model 
 
 ## Proponowana architektura
 
-Cztery projekty pod `src/`, warstwy lekkie (bez ciężkiego DDD). Domena jest czysta (zero zależności od EF), Infrastructure zna Domenę i EF, procesy (Api/Worker) zależą tylko od Infrastructure.
+Cztery projekty pod `backend/src/`, warstwy lekkie (bez ciężkiego DDD). Domena jest czysta (zero zależności od EF), Infrastructure zna Domenę i EF, procesy (Api/Worker) zależą tylko od Infrastructure.
 
 ```
 Domain  ◄──  Infrastructure  ◄──  Api      (ASP.NET Core, minimal API)
@@ -366,22 +366,22 @@ Host Workera (`Host.CreateApplicationBuilder`) rejestruje `PromptProcessingWorke
 
 | Element | Warstwa | Ścieżka |
 |---|---|---|
-| `PromptStatus` (enum) | Domain | `src/PromptQueue.Domain/Prompts/PromptStatus.cs` |
-| `Prompt` (encja, `Guid` w konstruktorze + przejścia) | Domain | `src/PromptQueue.Domain/Prompts/Prompt.cs` |
-| `IPromptRepository` (port, `Guid`) | Domain | `src/PromptQueue.Domain/Prompts/IPromptRepository.cs` |
-| `PromptQueueDbContext` | Infrastructure | `src/PromptQueue.Infrastructure/PromptQueueDbContext.cs` |
-| `PromptConfiguration` (`Id` → `ValueGeneratedNever`) | Infrastructure | `src/PromptQueue.Infrastructure/Configurations/PromptConfiguration.cs` |
-| `PromptRepository` (`Guid`, sort `CreatedAt`+`Id`) | Infrastructure | `src/PromptQueue.Infrastructure/Repositories/PromptRepository.cs` |
-| `AddInfrastructure` (DI) | Infrastructure | `src/PromptQueue.Infrastructure/DependencyInjection.cs` |
-| `DesignTimeDbContextFactory` | Infrastructure | `src/PromptQueue.Infrastructure/DesignTimeDbContextFactory.cs` |
-| `MigrationExtensions.ApplyMigrationsAsync` (log + fail-fast) | Infrastructure | `src/PromptQueue.Infrastructure/MigrationExtensions.cs` |
-| Migracja `InitialCreate` (`uuid` PK) | Infrastructure | `src/PromptQueue.Infrastructure/Migrations/*` (generowane) |
-| Host + `/health` + migracja na starcie | Api | `src/PromptQueue.Api/Program.cs`, `appsettings*.json` |
-| `GlobalExceptionHandler` + rejestracja | Api | `src/PromptQueue.Api/GlobalExceptionHandler.cs`, `Program.cs` |
-| Host + placeholder `PromptProcessingWorker` (log + try/catch) | Worker | `src/PromptQueue.Worker/Program.cs`, `PromptProcessingWorker.cs` |
+| `PromptStatus` (enum) | Domain | `backend/src/PromptQueue.Domain/Prompts/PromptStatus.cs` |
+| `Prompt` (encja, `Guid` w konstruktorze + przejścia) | Domain | `backend/src/PromptQueue.Domain/Prompts/Prompt.cs` |
+| `IPromptRepository` (port, `Guid`) | Domain | `backend/src/PromptQueue.Domain/Prompts/IPromptRepository.cs` |
+| `PromptQueueDbContext` | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/PromptQueueDbContext.cs` |
+| `PromptConfiguration` (`Id` → `ValueGeneratedNever`) | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/Configurations/PromptConfiguration.cs` |
+| `PromptRepository` (`Guid`, sort `CreatedAt`+`Id`) | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/Repositories/PromptRepository.cs` |
+| `AddInfrastructure` (DI) | Infrastructure | `backend/src/PromptQueue.Infrastructure/DependencyInjection.cs` |
+| `DesignTimeDbContextFactory` | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/DesignTimeDbContextFactory.cs` |
+| `MigrationExtensions.ApplyMigrationsAsync` (log + fail-fast) | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/MigrationExtensions.cs` |
+| Migracja `InitialCreate` (`uuid` PK) | Infrastructure | `backend/src/PromptQueue.Infrastructure/Persistence/Migrations/*` (generowane) |
+| Host + `/health` + migracja na starcie | Api | `backend/src/PromptQueue.Api/Program.cs`, `appsettings*.json` |
+| `GlobalExceptionHandler` + rejestracja | Api | `backend/src/PromptQueue.Api/GlobalExceptionHandler.cs`, `Program.cs` |
+| Host + placeholder `PromptProcessingWorker` (log + try/catch) | Worker | `backend/src/PromptQueue.Worker/Program.cs`, `PromptProcessingWorker.cs` |
 | Usługa `postgres` (dev) | Orkiestracja | `docker-compose.yml` |
-| Solution + referencje projektów | — | `PromptQueue.sln` |
-| Testy jednostkowe domeny | Tests | `tests/PromptQueue.Domain.Tests/PromptTests.cs` |
+| Solution + referencje projektów | — | `backend/PromptQueue.sln` |
+| Testy jednostkowe domeny | Tests | `backend/tests/PromptQueue.Domain.Tests/PromptTests.cs` |
 
 ## Przepływ danych
 
@@ -421,22 +421,22 @@ Pending ──StartProcessing()──► Processing ──Complete(result)──
 
 ## Plan implementacji
 
-1. Utwórz solution i projekty pod `src/` (`classlib` Domain/Infrastructure, `web` Api, `worker` Worker) i referencje (Infra→Domain, Api→Infra, Worker→Infra) — `PromptQueue.sln`.
-2. Dodaj do Infrastructure pakiety `Npgsql.EntityFrameworkCore.PostgreSQL` (10.x) i `Microsoft.EntityFrameworkCore.Design` — `src/PromptQueue.Infrastructure/PromptQueue.Infrastructure.csproj`.
-3. Zaimplementuj `PromptStatus`, `Prompt` (`Guid.NewGuid()` + przejścia + bramki) i `IPromptRepository` (`Guid`) — `src/PromptQueue.Domain/Prompts/`.
-4. Zaimplementuj `PromptQueueDbContext` i `PromptConfiguration` (`Id` → `ValueGeneratedNever`) — `src/PromptQueue.Infrastructure/`.
-5. Zaimplementuj `PromptRepository` (`GetByIdAsync(Guid)`, `GetAllAsync` sort `CreatedAt`+`Id`) — `src/PromptQueue.Infrastructure/Repositories/PromptRepository.cs`.
-6. Dodaj `AddInfrastructure`, `DesignTimeDbContextFactory`, `MigrationExtensions` (log start/koniec, try/catch + rethrow) — `src/PromptQueue.Infrastructure/`.
-7. Wygeneruj migrację (`uuid` PK): `dotnet ef migrations add InitialCreate -p src/PromptQueue.Infrastructure -s src/PromptQueue.Infrastructure` — `src/PromptQueue.Infrastructure/Migrations/`.
-8. Napisz host Api: `AddInfrastructure`, `AddExceptionHandler<GlobalExceptionHandler>()` + `AddProblemDetails()` + `app.UseExceptionHandler()`, `await app.Services.ApplyMigrationsAsync()`, `GET /health`, klasa `GlobalExceptionHandler`, poziomy logów w `appsettings` — `src/PromptQueue.Api/`.
-9. Napisz host Worker z placeholderowym `PromptProcessingWorker : BackgroundService` (log started/stopping, try/catch w pętli z filtrem `when`) — `src/PromptQueue.Worker/`.
+1. Utwórz solution i projekty pod `backend/src/` (`classlib` Domain/Infrastructure, `web` Api, `worker` Worker) i referencje (Infra→Domain, Api→Infra, Worker→Infra) — `backend/PromptQueue.sln`.
+2. Dodaj do Infrastructure pakiety `Npgsql.EntityFrameworkCore.PostgreSQL` (10.x) i `Microsoft.EntityFrameworkCore.Design` — `backend/src/PromptQueue.Infrastructure/PromptQueue.Infrastructure.csproj`.
+3. Zaimplementuj `PromptStatus`, `Prompt` (`Guid.NewGuid()` + przejścia + bramki) i `IPromptRepository` (`Guid`) — `backend/src/PromptQueue.Domain/Prompts/`.
+4. Zaimplementuj `PromptQueueDbContext` i `PromptConfiguration` (`Id` → `ValueGeneratedNever`) — `backend/src/PromptQueue.Infrastructure/`.
+5. Zaimplementuj `PromptRepository` (`GetByIdAsync(Guid)`, `GetAllAsync` sort `CreatedAt`+`Id`) — `backend/src/PromptQueue.Infrastructure/Persistence/Repositories/PromptRepository.cs`.
+6. Dodaj `AddInfrastructure`, `DesignTimeDbContextFactory`, `MigrationExtensions` (log start/koniec, try/catch + rethrow) — `backend/src/PromptQueue.Infrastructure/`.
+7. Wygeneruj migrację (`uuid` PK): `dotnet ef migrations add InitialCreate -p backend/src/PromptQueue.Infrastructure -s backend/src/PromptQueue.Infrastructure -o Persistence/Migrations` — `backend/src/PromptQueue.Infrastructure/Persistence/Migrations/`.
+8. Napisz host Api: `AddInfrastructure`, `AddExceptionHandler<GlobalExceptionHandler>()` + `AddProblemDetails()` + `app.UseExceptionHandler()`, `await app.Services.ApplyMigrationsAsync()`, `GET /health`, klasa `GlobalExceptionHandler`, poziomy logów w `appsettings` — `backend/src/PromptQueue.Api/`.
+9. Napisz host Worker z placeholderowym `PromptProcessingWorker : BackgroundService` (log started/stopping, try/catch w pętli z filtrem `when`) — `backend/src/PromptQueue.Worker/`.
 10. Dodaj `docker-compose.yml` z usługą `postgres:alpine` (env `POSTGRES_*`, wolumen, healthcheck `pg_isready`) — `docker-compose.yml`.
-11. Dodaj projekt testów domeny (xUnit) i testy przejść stanu + generacji Id — `tests/PromptQueue.Domain.Tests/`.
-12. Weryfikacja DoD (PowerShell): `docker compose up -d postgres`; `$env:ConnectionStrings__PromptQueue = '...'`; `dotnet ef database update -p src/PromptQueue.Infrastructure -s src/PromptQueue.Infrastructure`; `dotnet run --project src/PromptQueue.Api` → w konsoli logi „Applying/Applied migrations", `/health` 200 i tabela `prompts` (kolumna `id uuid`) w bazie.
+11. Dodaj projekt testów domeny (xUnit) i testy przejść stanu + generacji Id — `backend/tests/PromptQueue.Domain.Tests/`.
+12. Weryfikacja DoD (PowerShell): `docker compose up -d postgres`; `$env:ConnectionStrings__PromptQueue = '...'`; `dotnet ef database update -p backend/src/PromptQueue.Infrastructure -s backend/src/PromptQueue.Infrastructure`; `dotnet run --project backend/src/PromptQueue.Api` → w konsoli logi „Applying/Applied migrations", `/health` 200 i tabela `prompts` (kolumna `id uuid`) w bazie.
 
 ## Strategia testowania
 
-- **Domain (jednostkowe, xUnit) — priorytet.** Cała logika pq-1 jest tu; pokryć w całości: konstruktor ustawia `Pending` + `CreatedAt==UpdatedAt` + niepuste, unikalne `Id` (dwie instancje → różne `Id`); `StartProcessing` z `Pending`→`Processing` bumpuje `UpdatedAt`; `Complete` tylko z `Processing` ustawia `Result`+`Completed`; `Fail` z `Pending`/`Processing` ustawia `ErrorMessage`+`Failed`; przejścia ze stanów terminalnych oraz `StartProcessing` spoza `Pending` rzucają `InvalidOperationException`; pusty `Content` rzuca w konstruktorze.
+- **Domain (jednostkowe, xUnit) — priorytet.** Cała logika pq-1 jest tu; pokryć: konstruktor ustawia `Pending`; `StartProcessing` z `Pending`→`Processing`; `Complete` tylko z `Processing` ustawia `Result`+`Completed`; `Fail` z `Pending`/`Processing` ustawia `ErrorMessage`+`Failed`; przejścia ze stanów terminalnych, `Complete` spoza `Processing` oraz `StartProcessing` spoza `Pending` rzucają `InvalidOperationException`; pusty `Content` rzuca `ArgumentException`. Testy generacji `Guid` i znaczników czasu świadomie pominięte (zachowanie frameworka / trywialne, nie logika domeny). Nazewnictwo: konwencja `Should_<Wynik>_When<Warunek>`.
 - **Infrastructure / migracja (weryfikacja manualna).** W pq-1 wystarczy checklista DoD (krok 12): migracja aplikuje schemat z kolumną `id uuid`, Api łączy się z bazą i loguje przebieg migracji. Automatyczny test integracyjny na Testcontainers-PostgreSQL wprowadzić dopiero z endpointami w pq-2 — teraz to nadmiarowa inwestycja. `IPromptRepository` daje pq-2/pq-3 szew do mockowania w testach jednostkowych warstwy aplikacji.
 - **Szew błędów/logowania — bez dedykowanych testów w pq-1.** `GlobalExceptionHandler` jest w pq-1 nieuruchamialny (brak endpointu, który rzuca; w Development i tak przechwytuje `DeveloperExceptionPage`) — testy zachowania handlera dokłada pq-2. Odporność pętli Workera to placeholder — testy dokłada pq-3 razem z realną pętlą. Dodawanie ich teraz to over-engineering przy braku logiki do przetestowania.
 

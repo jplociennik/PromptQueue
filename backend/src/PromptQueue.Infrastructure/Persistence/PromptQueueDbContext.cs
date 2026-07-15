@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PromptQueue.Domain.Prompts;
 
-namespace PromptQueue.Infrastructure;
+namespace PromptQueue.Infrastructure.Persistence;
 
 /// <summary>Kontekst EF Core kolejki promptów; ładuje konfiguracje encji z własnego assembly.</summary>
 public class PromptQueueDbContext(DbContextOptions<PromptQueueDbContext> options) : DbContext(options)

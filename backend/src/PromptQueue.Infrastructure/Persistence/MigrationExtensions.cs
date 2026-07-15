@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace PromptQueue.Infrastructure;
+namespace PromptQueue.Infrastructure.Persistence;
 
 /// <summary>Aplikacja migracji na starcie hosta; loguje przebieg i fail-fast (rethrow) przy błędzie.</summary>
 public static class MigrationExtensions

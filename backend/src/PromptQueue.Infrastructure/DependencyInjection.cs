@@ -2,7 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PromptQueue.Domain.Prompts;
-using PromptQueue.Infrastructure.Repositories;
+using PromptQueue.Infrastructure.Persistence;
+using PromptQueue.Infrastructure.Persistence.Repositories;
 
 namespace PromptQueue.Infrastructure;
 

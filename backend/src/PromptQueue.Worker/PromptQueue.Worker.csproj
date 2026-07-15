@@ -14,4 +14,8 @@
   <ItemGroup>
     <ProjectReference Include="..\PromptQueue.Infrastructure\PromptQueue.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

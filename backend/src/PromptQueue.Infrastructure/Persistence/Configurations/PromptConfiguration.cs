@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PromptQueue.Domain.Prompts;
 
-namespace PromptQueue.Infrastructure.Configurations;
+namespace PromptQueue.Infrastructure.Persistence.Configurations;
 
 /// <summary>Mapowanie encji Prompt na tabelę prompts; Id nadawane przez aplikację, status jako tekst.</summary>
 public class PromptConfiguration : IEntityTypeConfiguration<Prompt>

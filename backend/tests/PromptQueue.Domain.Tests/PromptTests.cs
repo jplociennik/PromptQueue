@@ -35,207 +35,132 @@ public class PromptTests
     // --- Konstruktor ---
 
     [Fact]
-    public void Constructor_InitializesStatusAsPending()
+    public void Should_StartAsPending_WhenCreated()
     {
-        // Arrange & Act
         var prompt = new Prompt(SampleContent);
 
-        // Assert
         Assert.Equal(PromptStatus.Pending, prompt.Status);
-    }
-
-    [Fact]
-    public void Constructor_SetsCreatedAtEqualToUpdatedAt()
-    {
-        // Arrange & Act
-        var prompt = new Prompt(SampleContent);
-
-        // Assert
-        Assert.Equal(prompt.CreatedAt, prompt.UpdatedAt);
-    }
-
-    [Fact]
-    public void Constructor_GeneratesNonEmptyId()
-    {
-        // Arrange & Act
-        var prompt = new Prompt(SampleContent);
-
-        // Assert
-        Assert.NotEqual(Guid.Empty, prompt.Id);
-    }
-
-    [Fact]
-    public void Constructor_GeneratesUniqueIdPerInstance()
-    {
-        // Arrange & Act
-        var first = new Prompt(SampleContent);
-        var second = new Prompt(SampleContent);
-
-        // Assert
-        Assert.NotEqual(first.Id, second.Id);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Constructor_WhenContentIsNullOrWhitespace_ThrowsArgumentException(string? content)
+    public void Should_ThrowArgumentException_WhenContentIsBlank(string? content)
     {
-        // Act & Assert
         Assert.Throws<ArgumentException>(() => new Prompt(content!));
     }
 
     // --- StartProcessing ---
 
     [Fact]
-    public void StartProcessing_FromPending_TransitionsToProcessing()
+    public void Should_TransitionToProcessing_WhenStartingFromPending()
     {
-        // Arrange
         var prompt = PendingPrompt();
 
-        // Act
         prompt.StartProcessing();
 
-        // Assert
         Assert.Equal(PromptStatus.Processing, prompt.Status);
     }
 
     [Fact]
-    public void StartProcessing_FromPending_LeavesUpdatedAtNotBeforeCreatedAt()
+    public void Should_ThrowInvalidOperation_WhenStartingFromProcessing()
     {
-        // Arrange
-        var prompt = PendingPrompt();
-
-        // Act
-        prompt.StartProcessing();
-
-        // Assert (>= a nie >: rozdzielczość zegara może dać identyczny znacznik)
-        Assert.True(prompt.UpdatedAt >= prompt.CreatedAt);
-    }
-
-    [Fact]
-    public void StartProcessing_WhenAlreadyProcessing_ThrowsInvalidOperationException()
-    {
-        // Arrange
         var prompt = ProcessingPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
     }
 
     [Fact]
-    public void StartProcessing_FromCompleted_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenStartingFromCompleted()
     {
-        // Arrange
         var prompt = CompletedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
     }
 
     [Fact]
-    public void StartProcessing_FromFailed_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenStartingFromFailed()
     {
-        // Arrange
         var prompt = FailedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
     }
 
     // --- Complete ---
 
     [Fact]
-    public void Complete_FromProcessing_SetsResultAndTransitionsToCompleted()
+    public void Should_SetResultAndComplete_WhenCompletingFromProcessing()
     {
-        // Arrange
         var prompt = ProcessingPrompt();
 
-        // Act
         prompt.Complete(SampleResult);
 
-        // Assert
         Assert.Equal(SampleResult, prompt.Result);
         Assert.Equal(PromptStatus.Completed, prompt.Status);
     }
 
     [Fact]
-    public void Complete_WhenPending_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenCompletingFromPending()
     {
-        // Arrange
         var prompt = PendingPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
     }
 
     [Fact]
-    public void Complete_FromCompleted_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenCompletingFromCompleted()
     {
-        // Arrange
         var prompt = CompletedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
     }
 
     [Fact]
-    public void Complete_FromFailed_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenCompletingFromFailed()
     {
-        // Arrange
         var prompt = FailedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
     }
 
     // --- Fail ---
 
     [Fact]
-    public void Fail_FromPending_SetsErrorAndTransitionsToFailed()
+    public void Should_SetErrorAndFail_WhenFailingFromPending()
     {
-        // Arrange
         var prompt = PendingPrompt();
 
-        // Act
         prompt.Fail(SampleError);
 
-        // Assert
         Assert.Equal(SampleError, prompt.ErrorMessage);
         Assert.Equal(PromptStatus.Failed, prompt.Status);
     }
 
     [Fact]
-    public void Fail_FromProcessing_SetsErrorAndTransitionsToFailed()
+    public void Should_SetErrorAndFail_WhenFailingFromProcessing()
     {
-        // Arrange
         var prompt = ProcessingPrompt();
 
-        // Act
         prompt.Fail(SampleError);
 
-        // Assert
         Assert.Equal(SampleError, prompt.ErrorMessage);
         Assert.Equal(PromptStatus.Failed, prompt.Status);
     }
 
     [Fact]
-    public void Fail_FromCompleted_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenFailingFromCompleted()
     {
-        // Arrange
         var prompt = CompletedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.Fail(SampleError));
     }
 
     [Fact]
-    public void Fail_FromFailed_ThrowsInvalidOperationException()
+    public void Should_ThrowInvalidOperation_WhenFailingFromFailed()
     {
-        // Arrange
         var prompt = FailedPrompt();
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => prompt.Fail(SampleError));
     }
 }

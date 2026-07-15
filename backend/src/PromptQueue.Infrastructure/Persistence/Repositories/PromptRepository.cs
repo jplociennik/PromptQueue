@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PromptQueue.Domain.Prompts;
 
-namespace PromptQueue.Infrastructure.Repositories;
+namespace PromptQueue.Infrastructure.Persistence.Repositories;
 
 /// <summary>Implementacja portu persystencji promptów na EF Core; deterministyczna kolejność odczytu.</summary>
 public class PromptRepository(PromptQueueDbContext dbContext) : IPromptRepository

@@ -5,14 +5,14 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using PromptQueue.Infrastructure;
+using PromptQueue.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace PromptQueue.Infrastructure.Migrations
+namespace PromptQueue.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PromptQueueDbContext))]
-    [Migration("20260715124725_InitialCreate")]
+    [Migration("20260715141018_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

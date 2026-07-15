@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace PromptQueue.Infrastructure;
+namespace PromptQueue.Infrastructure.Persistence;
 
 /// <summary>Fabryka DbContext dla narzędzi EF (dotnet ef); czyta connection string z env var (fail-fast).</summary>
 public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<PromptQueueDbContext>
