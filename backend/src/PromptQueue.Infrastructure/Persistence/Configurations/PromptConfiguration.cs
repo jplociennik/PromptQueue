@@ -14,7 +14,5 @@ public class PromptConfiguration : IEntityTypeConfiguration<Prompt>
         builder.Property(p => p.Id).ValueGeneratedNever();
         builder.Property(p => p.Content).IsRequired();
         builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
-        builder.Property(p => p.CreatedAt);
-        builder.Property(p => p.UpdatedAt);
     }
 }

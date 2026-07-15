@@ -1,10 +1,10 @@
 # Raport implementacji: pq-1 — Fundament: struktura rozwiązania + baza
 
 > Projekt: [doc/projects/pq-1.md](../projects/pq-1.md)
-> Data: 2026-07-15 (5 iteracji: TDD Red→Green, poprawki CR, reorganizacja repo, uporządkowanie testów, porządki w Infrastructure)
-> Commit: `a0c388b` [pq-1] Fundament (reorganizacja repo jeszcze niezacommitowana)
+> Data: 2026-07-15 (6 iteracji: TDD Red→Green, poprawki CR, reorganizacja repo, uporządkowanie testów, porządki w Infrastructure, CR #2 + sprzątnięcie)
+> Commit: `a0c388b`→`e037ba6` [pq-1] (fundament + reorganizacja repo) + osobny commit sprzątnięcia po CR #2
 > MR: —
-> Code review: 1× (iter. 1, **AKCEPTUJ Z UWAGAMI**). Iter. 2–5 bez ponownego CR — poprawki CR, reorganizacja repo, uporządkowanie testów i przeniesienie warstwy danych do `Persistence/` (bez zmian logiki produkcyjnej); build 0/0, testy 16/16 zielone.
+> Code review: 2× — iter. 1 **AKCEPTUJ Z UWAGAMI** (uwagi naniesione), iter. 6 **AKCEPTUJ** (pełny re-CR finalnego stanu: build 0/0, testy 16/16, brak dryfu migracji potwierdzony `has-pending-model-changes`; naniesiona 1 sugestia porządkowa). Iter. 2–5 bez CR — reorganizacja repo, uporządkowanie testów i przeniesienie warstwy danych do `Persistence/` (bez zmian logiki produkcyjnej).
 
 ## Co realizuje task
 
@@ -126,3 +126,4 @@ DoD end-to-end (Docker dostępny): `docker compose up postgres` → healthy; `do
 | 3 | Reorganizacja repo: backend → `backend/` (monorepo `backend/`+`frontend/`), jeden root `.gitignore`, wspólny `backend/appsettings.json` (linkowany), `launchSettings.json` odpięty od gita, `.vscode/settings.json` | — |
 | 4 | Uporządkowanie testów: usunięte 4 słabe (generacja `Guid`, znaczniki czasu), pozostałe przemianowane na konwencję `Should_…` (20 → 16, wszystkie zielone) | — |
 | 5 | Porządki w Infrastructure: dostęp do danych pod `Persistence/` (namespace = folder), migracja przegenerowana; `code-backend` skill z konwencjami | — |
+| 6 | CR #2 — pełny re-przegląd finalnego stanu: werdykt **AKCEPTUJ**; naniesiona sugestia porządkowa (usunięte no-opy `Property(CreatedAt/UpdatedAt)` w `PromptConfiguration`, model EF bez zmian — potwierdzone `has-pending-model-changes`) | ✅ AKCEPTUJ |
