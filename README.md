@@ -50,6 +50,8 @@ cp .env.example .env
 | `OLLAMA_MODEL` | `llama3.2` | Model pobierany przez `ollama-pull` i używany przez workera |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres` / `postgres` / `promptqueue` | Poświadczenia dev bazy |
 
+Domyślne poświadczenia są jawnymi wartościami dev — na środowisku innym niż lokalne demo nadpisz `POSTGRES_PASSWORD` w `.env`.
+
 ## Pobranie modelu ręcznie (alternatywa dla auto-pull)
 
 `ollama-pull` pobiera model automatycznie przy pierwszym starcie. Jeśli wolisz pobrać ręcznie (np. inny model niż domyślny, bez czekania na `ollama-pull`):
@@ -63,12 +65,14 @@ docker compose exec ollama ollama pull llama3.2
 Do pracy nad pojedynczą warstwą bez pełnego `docker compose up`:
 
 **Backend** — Postgres i Ollama z compose, Api/Worker lokalnie:
-```bash
+```powershell
 docker compose up -d postgres ollama
 $env:ConnectionStrings__PromptQueue = "Host=localhost;Port=5433;Database=promptqueue;Username=postgres;Password=postgres"
 dotnet run --project backend/src/PromptQueue.Api
 dotnet run --project backend/src/PromptQueue.Worker
 ```
+Na Linux/macOS zamiast `$env:...` użyj `export ConnectionStrings__PromptQueue="Host=localhost;Port=5433;..."`.
+
 Szczegóły: [doc/implementation-reports/pq-1.md](doc/implementation-reports/pq-1.md), [pq-3.md](doc/implementation-reports/pq-3.md).
 
 **Frontend** — Vite dev server z proxy na lokalne Api (`:5269`):
@@ -79,7 +83,7 @@ npm run dev
 ```
 Szczegóły: [doc/implementation-reports/pq-4.md](doc/implementation-reports/pq-4.md), [pq-5.md](doc/implementation-reports/pq-5.md).
 
-**Testy backendu** (wymaga Dockera — Testcontainers): `. $PROFILE.CurrentUserAllHosts; all-test` z katalogu `backend/`.
+**Testy backendu** (wymaga Dockera — Testcontainers): `dotnet test` z katalogu `backend/`.
 **Testy frontendu**: `npm run test` z katalogu `frontend/`.
 
 ## Architektura

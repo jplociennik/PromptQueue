@@ -26,4 +26,4 @@ Index jednolinijkowy — szczegóły w plikach tematycznych; przed przeglądem d
 - Postgres `postgres:18-alpine` (PINUJ major!), wolumen na parent `/var/lib/postgresql`; Ollama `ollama/ollama:0.32.0`, healthcheck `ollama list`.
 
 ## Historia przeglądów — [review-history.md](review-history.md)
-- pq-1 Fundament: AKCEPTUJ Z UWAGAMI · pq-2 API: AKCEPTUJ · pq-2 refaktor testów: AKCEPTUJ · pq-3 Worker+Ollama: AKCEPTUJ Z UWAGAMI · pq-4 Frontend: AKCEPTUJ Z UWAGAMI · pq-5 Frontend lista+polling: AKCEPTUJ.
+- pq-1 Fundament: AKCEPTUJ Z UWAGAMI · pq-2 API: AKCEPTUJ · pq-2 refaktor testów: AKCEPTUJ · pq-3 Worker+Ollama: AKCEPTUJ Z UWAGAMI · pq-4 Frontend: AKCEPTUJ Z UWAGAMI · pq-5 Frontend lista+polling: AKCEPTUJ · pq-6 Orkiestracja docker-compose+README: AKCEPTUJ (zweryf. live, 1:1 z projektem; fix precedencji `AddEnvironmentVariables()` PO `AddJsonFile` bo shared appsettings zaszywa `Worker:OllamaBaseUrl=localhost`).
