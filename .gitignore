@@ -39,11 +39,6 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
-# Firebird data (Docker volume) - ignore DB files, keep folder in repo
-data/*
-!data/.gitkeep
-!data/README.md
-
 # Others
 ~$*
 *~
@@ -76,8 +71,6 @@ nunit-*.xml
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
-.claude/settings.local.json
-KIK.Infrastructure.Web/Properties/launchSettings.json
 
 # C# Dev Kit (VS Code) language server cache
 *.csproj.lscache
