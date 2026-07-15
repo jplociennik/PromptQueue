@@ -143,6 +143,10 @@ public sealed class PromptEndpointsTests(PromptApiFactory factory) : IClassFixtu
         public Task<IReadOnlyList<Prompt>> GetAllAsync(CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("Database unavailable.");
 
+        public Task<IReadOnlyList<Prompt>> GetByStatusAsync(
+            PromptStatus status, int maxCount, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Database unavailable.");
+
         public Task SaveChangesAsync(CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("Database unavailable.");
     }

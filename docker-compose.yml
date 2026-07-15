@@ -1,4 +1,4 @@
-# Orkiestracja developerska pq-1: tylko PostgreSQL. Pełny compose (Api, Worker, Ollama, frontend) domyka pq-6.
+# Orkiestracja developerska: PostgreSQL + Ollama (dla workera pq-3). Api/Worker/frontend jako serwisy domyka pq-6.
 services:
   postgres:
     image: postgres:18-alpine
@@ -18,5 +18,21 @@ services:
       timeout: 5s
       retries: 5
 
+  ollama:
+    # Tag pinowany (nie 'latest') — powtarzalność środowiska. Model pobierany ręcznie:
+    # docker compose exec ollama ollama pull llama3.2
+    image: ollama/ollama:0.32.0
+    container_name: promptqueue-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres-data:
+  ollama-data:

@@ -184,4 +184,46 @@ public class PromptTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    // --- Requeue ---
+
+    [Fact]
+    public void Should_TransitionToPending_WhenRequeuingFromProcessing()
+    {
+        var prompt = ProcessingPrompt();
+
+        prompt.Requeue();
+
+        prompt.Status.Should().Be(PromptStatus.Pending);
+    }
+
+    [Fact]
+    public void Should_ThrowInvalidOperation_WhenRequeuingFromPending()
+    {
+        var prompt = PendingPrompt();
+
+        Action act = () => prompt.Requeue();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Should_ThrowInvalidOperation_WhenRequeuingFromCompleted()
+    {
+        var prompt = CompletedPrompt();
+
+        Action act = () => prompt.Requeue();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Should_ThrowInvalidOperation_WhenRequeuingFromFailed()
+    {
+        var prompt = FailedPrompt();
+
+        Action act = () => prompt.Requeue();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 }

@@ -30,6 +30,18 @@ Greenfield C#/.NET backend + Vite/React/TS frontend. Stack decisions live in roo
 - `MigrationExtensions.ApplyMigrationsAsync`: resolves `ILogger`, logs start/done, try/catch -> LogError + rethrow (fail-fast, host won't start on broken DB). Only real error path in pq-1.
 - Worker `PromptProcessingWorker` placeholder: logs started/stopping + try/catch around loop body (log + continue) so exceptions don't kill process — foundation for pq-3 "worker doesn't crash".
 
+## pq-2 implemented (state as of 2026-07-15) + test conventions
+- pq-2 done: build 0/0, tests 33/33. 3 Minimal API endpoints in `Api/Prompts/`, no service class; validator = pure fn. `public partial class Program;` for WebApplicationFactory.
+- Test conventions (fundament pq-3+): `*.UnitTests` (no I/O) / `*.IntegrationTests` (Testcontainers `postgres:18-alpine`). Shared `PromptQueue.TestSupport` (refs Api) = `PromptApiClient`, `CreatePromptsRequestBuilder`, `ProblemDetailsAssertions`. **AwesomeAssertions 9.4.0** (namespace `AwesomeAssertions`, asserts-at-bottom + `AssertionScope`), NOT xUnit Assert, NOT FluentAssertions v8+. **No mocking library** — hand-written test doubles (e.g. throwing repo stub via `ConfigureTestServices`).
+- SDK confirmed 10.0.110. `Microsoft.EntityFrameworkCore.Relational` pinned 10.0.10 in Infrastructure (MSB3277 fix; Design `PrivateAssets=all` doesn't propagate version).
+- CR lesson (pq-1 O2): pin docker image tags, never floating `latest`.
+
+## pq-3 LLM facts (verified web 2026-07)
+- Abstraction stays `IChatClient` (`Microsoft.Extensions.AI`) per CLAUDE.md; method `GetResponseAsync(...)` -> `ChatResponse.Text`.
+- Ollama provider = **OllamaSharp** pkg (`OllamaApiClient` implements `IChatClient`). `Microsoft.Extensions.AI.Ollama` is **DEPRECATED** — do not use.
+- `BackgroundService` = singleton -> scoped DbContext/repo ONLY via `IServiceScopeFactory.CreateScope()` per cycle. Split shell (loop/timing/scope) from testable scoped processor.
+- Loop filter `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)` distinguishes shutdown from stray `TaskCanceledException` (HttpClient timeout).
+
 ## Conventions
 - Backend: primary-constructor DI (C# 12), async+CancellationToken on I/O, English names / Polish `<summary>`.
 - React style rules live in skill `code-frontend`.

@@ -53,6 +53,14 @@ public class Prompt
         Touch();
     }
 
+    /// <summary>Zwraca prompt do kolejki (np. po przerwaniu przetwarzania); dozwolone wyłącznie z Processing.</summary>
+    public void Requeue()
+    {
+        EnsureStatus(PromptStatus.Processing);
+        Status = PromptStatus.Pending;
+        Touch();
+    }
+
     private void Touch() => UpdatedAt = DateTime.UtcNow;
 
     private void EnsureStatus(PromptStatus expected)
