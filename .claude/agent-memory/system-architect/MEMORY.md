@@ -58,6 +58,14 @@ Greenfield C#/.NET backend + Vite/React/TS frontend. Stack decisions live in roo
 - StatusBadge: `Record<PromptStatus,string>` labels + `styles[status]` class (same idiom as Alert/Button `styles[variant]`); Record forces exhaustiveness at compile time.
 - Component-class idiom in repo: `[styles.base, styles[variant], className].filter(Boolean).join(' ')`.
 
+## pq-6 orchestration (designed 2026-07-15)
+- HARD user decision: postgres host mapping **5433:5432** (native PG occupies host 5432; conflict hit during pq-5 manual verify). Inside compose api/worker use `postgres:5432`. All host-side conn strings (dotnet ef, psql) → 5433.
+- Api `GET /health` = 200 static, mapped AFTER `await ApplyMigrationsAsync()` (before `app.Run()`) ⇒ **health=200 ⟹ schema ready**. Gate `worker depends_on api condition:service_healthy` solves the pq-1/pq-3 handoff with ZERO worker code change. Api healthcheck needs curl → install in runtime stage (aspnet Debian image lacks it).
+- Frontend serving = **nginx** (multi-stage node build → nginx serve) + reverse-proxy `location /api/ → http://api:8080`. Keeps single origin, `VITE_API_BASE_URL` empty (relative /api), NO prod-CORS. Vite preview rejected (dev server).
+- Model auto-pull = one-shot init service `ollama-pull` (image ollama/ollama, `OLLAMA_HOST=http://ollama:11434`, `ollama pull ${OLLAMA_MODEL}`, restart:no) depends_on ollama healthy; worker depends_on it `service_completed_successfully`. ~2GB first-up cost, cached in ollama-data volume. Marked proposed (lengthens first up).
+- Docker build contexts: api/worker `context: ./backend` (appsettings.json linked via `..\..\`), dockerfile `src/PromptQueue.X/Dockerfile`; frontend `context: ./frontend`. Api container listens 8080; compose conn string `Host=postgres;Port=5432;...`.
+- `.env.example` at root: OLLAMA_MODEL, POSTGRES_USER/PASSWORD/DB (compose interpolation `${VAR:-default}`). Conn string for design-time EF stays host-side env-only, now port 5433.
+
 ## Conventions
 - Backend: primary-constructor DI (C# 12), async+CancellationToken on I/O, English names / Polish `<summary>`.
 - React style rules live in skill `code-frontend`.

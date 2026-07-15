@@ -1,26 +1,29 @@
-# Orkiestracja developerska: PostgreSQL + Ollama (dla workera pq-3). Api/Worker/frontend jako serwisy domyka pq-6.
+# Orkiestracja pełnego systemu: Postgres, Ollama (+ auto-pull modelu), Api, Worker, frontend.
+# `docker compose up` stawia całość; porty i przebieg opisane w README.md.
 services:
   postgres:
     image: postgres:18-alpine
     container_name: promptqueue-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: promptqueue
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-promptqueue}
     ports:
-      - "5432:5432"
+      # Host-port 5433 (nie 5432) — na wielu maszynach deweloperskich 5432 jest zajęty przez
+      # natywny PostgreSQL. Kontener wewnątrz sieci compose nasłuchuje standardowo na 5432
+      # (api/worker łączą się przez "postgres:5432", niezależnie od tego mapowania).
+      - "5433:5432"
     volumes:
       # Mount na katalog nadrzędny (konwencja obrazu PostgreSQL 18+; działa też dla starszych majorów).
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d promptqueue"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-promptqueue}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   ollama:
-    # Tag pinowany (nie 'latest') — powtarzalność środowiska. Model pobierany ręcznie:
-    # docker compose exec ollama ollama pull llama3.2
+    # Tag pinowany (nie 'latest') — powtarzalność środowiska. Model pobiera usługa ollama-pull.
     image: ollama/ollama:0.32.0
     container_name: promptqueue-ollama
     ports:
@@ -32,6 +35,73 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  ollama-pull:
+    # Jednorazowy klient: woła serwer ollama o pobranie modelu do wspólnego wolumenu ollama-data,
+    # kończy się (exit 0) i nie wstaje ponownie. Worker czeka na jego zakończenie (patrz depends_on).
+    image: ollama/ollama:0.32.0
+    container_name: promptqueue-ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull ${OLLAMA_MODEL:-llama3.2}"]
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: src/PromptQueue.Api/Dockerfile
+    container_name: promptqueue-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__PromptQueue: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-promptqueue};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "5269:8080"
+    healthcheck:
+      # Niezależny od bazy (statyczne 200); istnienie odpowiedzi = migracja zakończona, bo
+      # ApplyMigrationsAsync() jest awaitowane przed app.Run() (Kestrel nie nasłuchuje wcześniej).
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: src/PromptQueue.Worker/Dockerfile
+    container_name: promptqueue-worker
+    restart: unless-stopped
+    depends_on:
+      # api:healthy ⟹ schemat zmigrowany (patrz komentarz w healthchecku api).
+      api:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__PromptQueue: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-promptqueue};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}"
+      Worker__OllamaBaseUrl: http://ollama:11434
+      Worker__OllamaModel: ${OLLAMA_MODEL:-llama3.2}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: promptqueue-frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
 
 volumes:
   postgres-data:
