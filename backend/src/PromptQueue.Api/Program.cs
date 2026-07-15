@@ -1,5 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using PromptQueue.Api;
+using PromptQueue.Api.Prompts;
 using PromptQueue.Infrastructure;
 using PromptQueue.Infrastructure.Persistence;
 
@@ -14,6 +17,10 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+// Enum jako string camelCase w JSON (np. "pending") — wprost mapowalny na StatusBadge frontu (pq-5).
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -21,5 +28,9 @@ app.UseExceptionHandler();
 await app.Services.ApplyMigrationsAsync();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapPromptEndpoints();
 
 app.Run();
+
+// Udostępnia klasę wejściową testom integracyjnym (WebApplicationFactory<Program>).
+public partial class Program;
