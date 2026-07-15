@@ -1,6 +1,6 @@
 using PromptQueue.Domain.Prompts;
 
-namespace PromptQueue.Domain.Tests;
+namespace PromptQueue.Domain.UnitTests;
 
 /// <summary>Testy jednostkowe cyklu życia promptu: stan początkowy, dozwolone przejścia i bramki nielegalnych zmian.</summary>
 public class PromptTests
@@ -39,7 +39,7 @@ public class PromptTests
     {
         var prompt = new Prompt(SampleContent);
 
-        Assert.Equal(PromptStatus.Pending, prompt.Status);
+        prompt.Status.Should().Be(PromptStatus.Pending);
     }
 
     [Theory]
@@ -48,7 +48,9 @@ public class PromptTests
     [InlineData("   ")]
     public void Should_ThrowArgumentException_WhenContentIsBlank(string? content)
     {
-        Assert.Throws<ArgumentException>(() => new Prompt(content!));
+        Action act = () => new Prompt(content!);
+
+        act.Should().Throw<ArgumentException>();
     }
 
     // --- StartProcessing ---
@@ -60,7 +62,7 @@ public class PromptTests
 
         prompt.StartProcessing();
 
-        Assert.Equal(PromptStatus.Processing, prompt.Status);
+        prompt.Status.Should().Be(PromptStatus.Processing);
     }
 
     [Fact]
@@ -68,7 +70,9 @@ public class PromptTests
     {
         var prompt = ProcessingPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
+        Action act = () => prompt.StartProcessing();
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -76,7 +80,9 @@ public class PromptTests
     {
         var prompt = CompletedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
+        Action act = () => prompt.StartProcessing();
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -84,7 +90,9 @@ public class PromptTests
     {
         var prompt = FailedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.StartProcessing());
+        Action act = () => prompt.StartProcessing();
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     // --- Complete ---
@@ -96,8 +104,9 @@ public class PromptTests
 
         prompt.Complete(SampleResult);
 
-        Assert.Equal(SampleResult, prompt.Result);
-        Assert.Equal(PromptStatus.Completed, prompt.Status);
+        using var _ = new AssertionScope();
+        prompt.Result.Should().Be(SampleResult);
+        prompt.Status.Should().Be(PromptStatus.Completed);
     }
 
     [Fact]
@@ -105,7 +114,9 @@ public class PromptTests
     {
         var prompt = PendingPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
+        Action act = () => prompt.Complete(SampleResult);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -113,7 +124,9 @@ public class PromptTests
     {
         var prompt = CompletedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
+        Action act = () => prompt.Complete(SampleResult);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -121,7 +134,9 @@ public class PromptTests
     {
         var prompt = FailedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.Complete(SampleResult));
+        Action act = () => prompt.Complete(SampleResult);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     // --- Fail ---
@@ -133,8 +148,9 @@ public class PromptTests
 
         prompt.Fail(SampleError);
 
-        Assert.Equal(SampleError, prompt.ErrorMessage);
-        Assert.Equal(PromptStatus.Failed, prompt.Status);
+        using var _ = new AssertionScope();
+        prompt.ErrorMessage.Should().Be(SampleError);
+        prompt.Status.Should().Be(PromptStatus.Failed);
     }
 
     [Fact]
@@ -144,8 +160,9 @@ public class PromptTests
 
         prompt.Fail(SampleError);
 
-        Assert.Equal(SampleError, prompt.ErrorMessage);
-        Assert.Equal(PromptStatus.Failed, prompt.Status);
+        using var _ = new AssertionScope();
+        prompt.ErrorMessage.Should().Be(SampleError);
+        prompt.Status.Should().Be(PromptStatus.Failed);
     }
 
     [Fact]
@@ -153,7 +170,9 @@ public class PromptTests
     {
         var prompt = CompletedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.Fail(SampleError));
+        Action act = () => prompt.Fail(SampleError);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -161,6 +180,8 @@ public class PromptTests
     {
         var prompt = FailedPrompt();
 
-        Assert.Throws<InvalidOperationException>(() => prompt.Fail(SampleError));
+        Action act = () => prompt.Fail(SampleError);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }
