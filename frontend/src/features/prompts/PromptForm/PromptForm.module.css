@@ -1,0 +1,11 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.errors {
+  margin: 0;
+  padding-left: 1.25rem;
+}

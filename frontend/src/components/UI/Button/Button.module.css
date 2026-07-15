@@ -1,0 +1,32 @@
+.button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.primary {
+  background-color: #2563eb;
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.ghost {
+  background-color: transparent;
+  color: #2563eb;
+  border-color: #cbd5e1;
+}
+
+.ghost:hover:not(:disabled) {
+  background-color: #f1f5f9;
+}

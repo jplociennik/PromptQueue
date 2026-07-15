@@ -1,0 +1,10 @@
+.field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+/* TextArea wypełnia dostępną szerokość; przycisk „Usuń" trzyma naturalny rozmiar. */
+.field > :first-child {
+  flex: 1;
+}

@@ -66,6 +66,8 @@ user-invocable: false
 
 8. **Wspólne typy w osobnym pliku.** Gdy w obrębie feature masz kilka komponentów, identyczne definicje typów/interfejsów (a także wspólne stałe i helpery) wydzielaj do jednego współdzielonego modułu (np. `types.ts`), zamiast powielać je w każdym komponencie.
 
+9. **Folder na komponent + współlokowany CSS Module.** Każdy komponent mieszka we własnym folderze nazwanym jak komponent (PascalCase), z plikiem komponentu i jego stylem obok siebie: `components/UI/Button/Button.tsx` + `components/UI/Button/Button.module.css`. Reużywalne komponenty pod `components/UI/`, komponenty domenowe w folderze feature'a — **pod-komponenty feature też dostają własny folder** (np. `features/prompts/PromptField/PromptField.tsx` + `PromptField.module.css`). Import stylu względny (`import styles from './Button.module.css'`); **bez barreli `index`** — importuj wprost plik komponentu (`.../UI/Button/Button`). Komponent bez stylów również ma własny folder. **Reguła uogólnia się: moduł z towarzyszącym plikiem dostaje własny folder grupujący** — komponent + `.module.css`, a także hook/klient + `.test.ts` (np. `hooks/useCreatePrompts/useCreatePrompts.ts` + `useCreatePrompts.test.ts`, `api/client/client.ts` + `client.test.ts`). Wszystkie custom hooki trzymaj pod `hooks/` (prefiks `use` → lokalizacja `hooks/`, nie rozrzucone po `features/`). Moduł bez towarzysza (np. `types.ts`, `prompts.ts`) zostaje pojedynczym plikiem. Bez barreli `index` — import wprost do pliku.
+
 ## TypeScript
 
 - Typuj **propsy, stan i modele danych z API** (`interface` / `type`) — kontrakt komponentu ma wynikać z typów, nie z domysłów.

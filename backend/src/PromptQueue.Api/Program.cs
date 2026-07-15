@@ -16,6 +16,7 @@ builder.Configuration.AddJsonFile(
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddCors();
 
 // Enum jako string camelCase w JSON (np. "pending") — wprost mapowalny na StatusBadge frontu (pq-5).
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -24,6 +25,10 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+// Dev-only CORS: wygoda wołania Api z originu frontu w developmencie (obok Vite dev-proxy). Prod-CORS → pq-6.
+if (app.Environment.IsDevelopment())
+    app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 
 await app.Services.ApplyMigrationsAsync();
 

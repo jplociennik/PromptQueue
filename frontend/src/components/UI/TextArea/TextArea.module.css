@@ -1,0 +1,32 @@
+/* Chat-input pure-CSS: auto-rośnie z treścią (field-sizing, Chromium 123+),
+   min/max-height jako granice i fallback, resize jako ręczna furtka. */
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background-color: #fff;
+  field-sizing: content;
+  min-height: 2.75rem;
+  max-height: 18rem;
+  resize: vertical;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.textarea:disabled {
+  background-color: #f8fafc;
+  opacity: 0.7;
+}
+
+.invalid,
+.invalid:focus {
+  border-color: #dc2626;
+  box-shadow: none;
+}

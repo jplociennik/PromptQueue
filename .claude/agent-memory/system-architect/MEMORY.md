@@ -42,6 +42,13 @@ Greenfield C#/.NET backend + Vite/React/TS frontend. Stack decisions live in roo
 - `BackgroundService` = singleton -> scoped DbContext/repo ONLY via `IServiceScopeFactory.CreateScope()` per cycle. Split shell (loop/timing/scope) from testable scoped processor.
 - Loop filter `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)` distinguishes shutdown from stray `TaskCanceledException` (HttpClient timeout).
 
+## pq-4 frontend foundation (designed 2026-07-15, verified facts)
+- Frontend monorepo dir = `frontend/` (sibling of `backend/`), empty at design time. Paths `frontend/src/...`.
+- API Development http port = **5269** (`backend/.../PromptQueue.Api/Properties/launchSettings.json`, http profile) — Vite dev proxy target.
+- Recommended: Vite `server.proxy['/api'] -> http://localhost:5269` so dev needs NO backend CORS; base URL via `VITE_API_BASE_URL` (default '', relative). Prod/compose (pq-6) reverse-proxies `/api` (nginx) -> CORS stays unneeded. This resolves the CORS deferral from pq-2.
+- Consumed contract (pq-2, camelCase JSON): POST `/api/v1/prompts` `{prompts:string[]}` -> 200 `{ids:string[],status:'pending'}`; 400 `application/problem+json` with `errors` (keys `prompts`, `prompts[i]`). PromptStatus enum -> camelCase strings `'pending'|'processing'|'completed'|'failed'`. Limits (SSOT backend, don't dup): 50 prompts, 8000 chars/each after trim.
+- pq-5 handoff: pre-declare `PromptResponse` in `frontend/src/api/types.ts` and single HTTP layer `api/` so pq-5 adds only `getPrompts` + polling hook, no rework.
+
 ## Conventions
 - Backend: primary-constructor DI (C# 12), async+CancellationToken on I/O, English names / Polish `<summary>`.
 - React style rules live in skill `code-frontend`.
