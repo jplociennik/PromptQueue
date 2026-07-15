@@ -49,6 +49,15 @@ Greenfield C#/.NET backend + Vite/React/TS frontend. Stack decisions live in roo
 - Consumed contract (pq-2, camelCase JSON): POST `/api/v1/prompts` `{prompts:string[]}` -> 200 `{ids:string[],status:'pending'}`; 400 `application/problem+json` with `errors` (keys `prompts`, `prompts[i]`). PromptStatus enum -> camelCase strings `'pending'|'processing'|'completed'|'failed'`. Limits (SSOT backend, don't dup): 50 prompts, 8000 chars/each after trim.
 - pq-5 handoff: pre-declare `PromptResponse` in `frontend/src/api/types.ts` and single HTTP layer `api/` so pq-5 adds only `getPrompts` + polling hook, no rework.
 
+## pq-5 frontend list + polling (designed 2026-07-15)
+- pq-4 shipped exactly as designed. Actual paths: `api/prompts.ts` (`createPrompts`, add `getPrompts`), `api/client/client.ts` (axios `http`+`ApiError`+`toApiError`), `hooks/X/X.ts`+`.test.ts`, `features/prompts/{PromptForm,PromptField}/`, `components/UI/{Button,TextArea,Alert}/`. `App.tsx` = composition root.
+- `PromptResponse` already in `api/types.ts` (id,content,status,result:string|null,errorMessage:string|null,createdAt,updatedAt). `PromptStatus` union of 4.
+- Vitest `globals:false` → tests import `{describe,it,expect,vi,beforeEach,afterEach}` from 'vitest'. RTL auto-cleanup NOT registered → render/renderHook tests MUST `afterEach(cleanup)` (+ `vi.useRealTimers()` for timer tests). Confirmed pattern in `useCreatePrompts.test.ts`.
+- `main.tsx` wraps `<StrictMode>` → effects double-invoke in dev; polling cleanup must be StrictMode-safe (validates teardown).
+- Polling hook pattern chosen: recursive `setTimeout` (no overlap) + `AbortController` + `cancelled` flag; refetch = bump a `trigger` useState in effect deps (restart loop = teardown+immediate tick, natural resume). useReducer for {prompts,status,error} (mirrors `useCreatePrompts`), stale-while-revalidate on error (keep prompts).
+- StatusBadge: `Record<PromptStatus,string>` labels + `styles[status]` class (same idiom as Alert/Button `styles[variant]`); Record forces exhaustiveness at compile time.
+- Component-class idiom in repo: `[styles.base, styles[variant], className].filter(Boolean).join(' ')`.
+
 ## Conventions
 - Backend: primary-constructor DI (C# 12), async+CancellationToken on I/O, English names / Polish `<summary>`.
 - React style rules live in skill `code-frontend`.

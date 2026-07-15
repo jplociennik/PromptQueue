@@ -1,0 +1,30 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background-color: #fff;
+}
+
+.content {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.result {
+  margin: 0;
+  padding: 0.5rem;
+  background-color: #f8fafc;
+  border-radius: 0.375rem;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}

@@ -7,7 +7,11 @@ import { Button } from '../../../components/UI/Button/Button';
 import { Alert } from '../../../components/UI/Alert/Alert';
 import styles from './PromptForm.module.css';
 
-export function PromptForm() {
+interface PromptFormProps {
+  onSubmitted?: () => void;
+}
+
+export function PromptForm({ onSubmitted }: PromptFormProps) {
   const { fields, add, remove, change, reset } = usePromptFields();
   const { state, submit } = useCreatePrompts();
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -25,6 +29,7 @@ export function PromptForm() {
     if (ok) {
       reset();
       setSubmitAttempted(false);
+      onSubmitted?.();
     }
   };
 

@@ -42,6 +42,7 @@ pnpm-debug.log*
 # ---- Narzędzia ----
 .cursor/mcp.json
 .claude/settings.local.json
+.playwright-mcp/
 
 # ---- System operacyjny ----
 .DS_Store
