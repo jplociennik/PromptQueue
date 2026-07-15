@@ -9,9 +9,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-promptqueue}
     ports:
-      # Host-port 5433 (nie 5432) — na wielu maszynach deweloperskich 5432 jest zajęty przez
-      # natywny PostgreSQL. Kontener wewnątrz sieci compose nasłuchuje standardowo na 5432
-      # (api/worker łączą się przez "postgres:5432", niezależnie od tego mapowania).
       - "5433:5432"
     volumes:
       # Mount na katalog nadrzędny (konwencja obrazu PostgreSQL 18+; działa też dla starszych majorów).
@@ -37,8 +34,6 @@ services:
       retries: 5
 
   ollama-pull:
-    # Jednorazowy klient: woła serwer ollama o pobranie modelu do wspólnego wolumenu ollama-data,
-    # kończy się (exit 0) i nie wstaje ponownie. Worker czeka na jego zakończenie (patrz depends_on).
     image: ollama/ollama:0.32.0
     container_name: promptqueue-ollama-pull
     depends_on:
@@ -66,8 +61,6 @@ services:
     ports:
       - "5269:8080"
     healthcheck:
-      # Niezależny od bazy (statyczne 200); istnienie odpowiedzi = migracja zakończona, bo
-      # ApplyMigrationsAsync() jest awaitowane przed app.Run() (Kestrel nie nasłuchuje wcześniej).
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 10s
       timeout: 5s
@@ -81,7 +74,6 @@ services:
     container_name: promptqueue-worker
     restart: unless-stopped
     depends_on:
-      # api:healthy ⟹ schemat zmigrowany (patrz komentarz w healthchecku api).
       api:
         condition: service_healthy
       ollama-pull:
