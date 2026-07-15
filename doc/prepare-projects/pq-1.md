@@ -13,7 +13,7 @@ Cel: położyć fundament, na którym stają wszystkie kolejne taski — struktu
 Stack (za `CLAUDE.md` → „Stack decisions"): C# / ASP.NET Core + EF Core, **PostgreSQL** (Npgsql). Bez pełnego DDD — domena jest cienka.
 
 Zakres:
-- **Struktura solution** (propozycja): `PromptQueue.Api` (ASP.NET Core), `PromptQueue.Worker` (proces w tle), `PromptQueue.Domain` (encja `Prompt` + reguły przejść stanu), `PromptQueue.Infrastructure` (EF Core `DbContext`, repozytorium, migracje). Warstwy lekkie, nie ciężkie DDD.
+- **Struktura solution** (propozycja): `PromptQueue.Api` (ASP.NET Core), `PromptQueue.Worker` (proces w tle), `PromptQueue.Domain` (encja `Prompt` + reguły przejść stanu), `PromptQueue.Infrastructure` (EF Core `DbContext`, dostęp do danych, migracje). Warstwy lekkie, nie ciężkie DDD.
 - **Encja `Prompt`**: identyfikator, treść, status, wynik (nullable), komunikat błędu (nullable), znaczniki czasu (utworzenie/aktualizacja). Status jako enum: `Pending`, `Processing`, `Completed`, `Failed` — nazwy stanów z [DoD.md L5](DoD.md#L5).
 - **Przejścia stanu jako metody encji** (np. `StartProcessing()`, `Complete(result)`, `Fail(error)`), a nie anemiczne settery — tyle „porządku", ile bez ceremonii.
 - **EF Core + Npgsql**: `DbContext`, konfiguracja encji, pierwsza migracja tworząca schemat. Connection string z zmiennej środowiskowej.
@@ -25,3 +25,5 @@ Definition of Done (tasku): rozwiązanie się kompiluje; migracja tworzy schemat
 
 - [?] Typ identyfikatora promptu: `int` (autoincrement) czy `Guid`? — wpływa na klucze i URL-e w GET ([pq-2](pq-2.md)).
 - [?] Czy prompt ma osobne pole nazwa/tytuł, czy tylko treść? — DoD mówi wyłącznie o „promptach".
+- [?] Abstrakcja repozytorium nad EF Core, czy dostęp wprost przez `DbContext`? — przy cienkiej domenie repozytorium bywa nadmiarowe (`DbContext` to już unit-of-work + repozytorium); do rozstrzygnięcia w `/design`.
+- [?] Czy pq-1 tworzy już puste projekty `Api`/`Worker`, czy powstają one dopiero w [pq-2](pq-2.md)/[pq-3](pq-3.md)? — decyduje, co znaczy „rozwiązanie się kompiluje" w DoD tego tasku.
