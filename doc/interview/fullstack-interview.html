@@ -1,0 +1,244 @@
+<h1>PromptQueue — pytania rekrutacyjne (fullstack)</h1>
+<p><em>Pytania, jakie można dostać na rozmowie na podstawie kodu projektu PromptQueue, z krótkimi odpowiedziami „jak na interview". Część I: backend (C#/.NET), Część II: frontend (React + TypeScript). Podzielone tematycznie, od łatwiejszych do trudniejszych — wszystkie odnoszą się do rzeczy, które realnie są w repo.</em></p>
+
+<h2>Część I — Backend (C#/.NET)</h2>
+
+<h3>1. Architektura</h3>
+
+<p><strong>P: Opisz architekturę tego backendu. Dlaczego cztery projekty?</strong></p>
+<p>O: Warstwy w stylu clean architecture: <code>Domain</code> (encje + porty, zero zależności), <code>Infrastructure</code> (EF Core/Npgsql — implementacja portów), <code>Api</code> i <code>Worker</code> jako dwa osobne hosty. Zależności idą tylko do środka — Domain nie wie nic o EF ani HTTP. Dzięki temu logikę domenową testuję bez bazy, a API i Worker mogą się deployować i skalować niezależnie.</p>
+
+<p><strong>P: Czemu Worker to osobny proces, a nie <code>BackgroundService</code> w API?</strong></p>
+<p>O: Osobny cykl życia — restart/deploy API nie przerywa przetwarzania promptów i odwrotnie. Osobne skalowanie (API skaluje się od ruchu HTTP, worker od długości kolejki) i izolacja awarii: crash workera nie kładzie API. W jednym procesie byłoby prościej, ale to świadomy trade-off.</p>
+
+<p><strong>P: Jak API i Worker się komunikują?</strong></p>
+<p>O: Nie komunikują się bezpośrednio — wspólna baza jest kolejką. API zapisuje prompt jako <code>Pending</code>, worker polluje tabelę po statusie. To wzorzec „database as a queue" — prosty, transakcyjny, bez dodatkowego brokera. Przy dużej skali zamieniłbym na RabbitMQ/Kafkę, ale tu broker byłby over-engineeringiem.</p>
+
+<h3>2. Domena / DDD</h3>
+
+<p><strong>P: Czemu reguły zmian statusu są zaszyte w encji <code>Prompt</code> (prywatne settery, metody <code>StartProcessing</code>/<code>Complete</code>/<code>Fail</code>), a nie w osobnym serwisie?</strong></p>
+<p>O: Świadomie unikam anemicznego modelu domeny (Anemic Domain Model — antywzorzec: encja jako worek getterów/setterów, logika rozsiana po serwisach). Rich domain model: encja jest jedynym źródłem prawdy przejść stanu i sama pilnuje spójności — nie da się z zewnątrz zrobić <code>prompt.Status = Completed</code> z pominięciem walidacji, przejście z niedozwolonego stanu rzuca <code>InvalidOperationException</code> (strażnicy stanu, fail-loud). Serwis mógłby te reguły ominąć albo zduplikować; encji nie ominie nikt.</p>
+
+<p><strong>P: Po co prywatny konstruktor bezparametrowy w <code>Prompt</code>?</strong></p>
+<p>O: Dla EF Core — materializacja z bazy używa refleksji i potrzebuje konstruktora bez parametrów. Jest prywatny, żeby kod aplikacji musiał iść przez konstruktor publiczny, który wymusza niepusty content i ustawia <code>Id</code>, <code>Pending</code>, timestampy.</p>
+
+<p><strong>P: Jakie stany ma prompt i które przejścia są legalne?</strong></p>
+<p>O: <code>Pending → Processing → Completed | Failed</code>, plus <code>Requeue</code> (<code>Processing → Pending</code>) do recovery po przerwanym przetwarzaniu. <code>Fail</code> jest dozwolony z każdego stanu nieterminalnego; <code>Completed</code>/<code>Failed</code> są terminalne — nic z nich nie wychodzi.</p>
+
+<p><strong>P: <code>Id = Guid.NewGuid()</code> w konstruktorze zamiast identity z bazy — dlaczego?</strong></p>
+<p>O: Encja jest kompletna od urodzenia — API może zwrócić <code>Ids</code> w response POST bez czekania na rundę do bazy. W EF mapuję to jako <code>ValueGeneratedNever()</code>. Trade-off: losowe GUID-y fragmentują indeks klastrowany; w Postgresie PK to B-tree bez klastrowania danych, więc problem jest mniejszy, a przy skali użyłbym GUID v7 (sekwencyjny).</p>
+
+<h3>3. EF Core / baza</h3>
+
+<p><strong>P: Jak skonfigurowane jest mapowanie encji?</strong></p>
+<p>O: Przez <code>IEntityTypeConfiguration&lt;Prompt&gt;</code> w osobnej klasie, nie adnotacjami na encji — domena zostaje czysta od EF. <code>Status</code> mapowany <code>HasConversion&lt;string&gt;()</code>.</p>
+
+<p><strong>P: Status jako string w bazie, nie int. Trade-off?</strong></p>
+<p>O: String jest czytelny w SQL-u i odporny na zmianę kolejności wartości enuma (int zapisuje pozycję — dopisanie wartości w środku enuma cicho psuje dane). Koszt: więcej bajtów i rename wartości wymaga migracji danych. Przy czterech statusach czytelność wygrywa.</p>
+
+<p><strong>P: Kto i kiedy wykonuje migracje?</strong></p>
+<p>O: Wyłącznie API, na starcie (<code>Database.MigrateAsync()</code>), fail-fast przy błędzie. Worker nigdy nie migruje — w compose startuje dopiero, gdy API jest healthy, więc nie ma wyścigu dwóch procesów o schemat. Przy wielu replikach API dodałbym osobny krok migracyjny (init job), bo <code>MigrateAsync</code> z wielu instancji naraz może się pokusić o konflikt.</p>
+
+<p><strong>P: Po co repozytorium (<code>IPromptRepository</code>), skoro EF już jest abstrakcją?</strong></p>
+<p>O: To port w Domain — domena i worker zależą od interfejsu, nie od EF. Ułatwia testy jednostkowe (in-memory fake zamiast DbContexta) i zbiera zapytania w jednym miejscu (deterministyczny <code>OrderBy(CreatedAt).ThenBy(Id)</code>). Świadomie cienkie — bez generycznego repo i unit-of-work wrappera, <code>SaveChangesAsync</code> jest po prostu wystawione.</p>
+
+<p><strong>P: Czemu PostgreSQL, a nie SQLite/SQL Server?</strong></p>
+<p>O: API i worker piszą do tej samej bazy równolegle — SQLite ma single-writer locking, więc odpada. SQL Server byłby OK, ale obraz Postgres alpine jest znacznie lżejszy w compose. Provider EF trzeba wybrać przed pierwszą migracją, bo migracje są provider-specific.</p>
+
+<h3>4. Worker / współbieżność</h3>
+
+<p><strong>P: <code>DbContext</code> jest scoped, a <code>BackgroundService</code> to singleton. Jak to pogodzić?</strong></p>
+<p>O: Klasyczna pułapka — singleton nie może dostać scoped zależności wprost (captive dependency: DbContext żyłby wiecznie, a jego change tracker akumulowałby encje w nieskończoność — de facto wyciek pamięci). Worker wstrzykuje <code>IServiceScopeFactory</code> i tworzy scope na każdy cykl pętli, z niego bierze scoped <code>PromptProcessor</code> z repozytorium; po cyklu scope się zwalnia razem z DbContextem. Bonus: po wyjątku kolejny cykl dostaje świeży DbContext, bez zatrutego change trackera.</p>
+
+<p><strong>P: Co się dzieje, gdy worker padnie (Ctrl+C, kill, prąd) w trakcie, gdy model generuje odpowiedź?</strong></p>
+<p>O: Status <code>Processing</code> zapisuję w bazie <strong>przed</strong> wywołaniem modelu, więc po brutalnym przerwaniu prompt zostaje w bazie jako <code>Processing</code> — nie znika. Na starcie worker robi recovery: <code>RequeueInterruptedAsync</code> przestawia wszystkie <code>Processing</code> z powrotem na <code>Pending</code> i kolejka rusza dalej. Semantyka at-least-once — prompt może być wykonany drugi raz, ale nigdy nie zginie; dla LLM-a duplikat wykonania jest akceptowalny. Graceful shutdown (SIGTERM) idzie osobną ścieżką: <code>CancellationToken</code> przerywa pracę czysto.</p>
+
+<p><strong>P: Czy ten design działa z wieloma instancjami workera?</strong></p>
+<p>O: Nie w obecnej formie — dwa workery mogą pobrać ten sam <code>Pending</code> (race między SELECT a UPDATE) i recovery jednego cofnąłby prompty żywego drugiego. Świadome ograniczenie: jeden worker. Skalowanie: <code>SELECT ... FOR UPDATE SKIP LOCKED</code> do atomowego przejęcia zadania plus lease/heartbeat zamiast hurtowego requeue.</p>
+
+<p><strong>P: Jak wygląda obsługa błędów wywołania modelu?</strong></p>
+<p>O: Jeden retry po krótkim delayu. Jeśli i on padnie — prompt dostaje <code>Fail</code> z komunikatem (przyciętym do 2000 znaków) i pętla idzie dalej; zły prompt nie blokuje kolejki. Wyjątki infrastruktury (np. <code>SaveChanges</code>) celowo bąbelkują wyżej — łapie je pętla hosta, loguje i kolejny cykl rusza ze świeżym scope. <code>OperationCanceledException</code> przy shutdownie jest propagowany, nie maskowany jako błąd.</p>
+
+<p><strong>P: Rola <code>CancellationToken</code> w tym kodzie?</strong></p>
+<p>O: Przechodzi przez całą ścieżkę: HTTP request abort w API, <code>stoppingToken</code> w workerze — graceful shutdown przerywa <code>Task.Delay</code>, zapytania do bazy i call do modelu. Wzorzec <code>catch (OperationCanceledException) when (token.IsCancellationRequested)</code> odróżnia celowe anulowanie od faktycznego timeoutu.</p>
+
+<p><strong>P: Polling co 5 s — czemu nie coś reaktywnego?</strong></p>
+<p>O: Najprostsza rzecz, która spełnia wymagania; interwał konfigurowalny. Alternatywy: Postgres <code>LISTEN/NOTIFY</code> (push bez brokera) albo kolejka komunikatów. Polling ma przewidywalny koszt i zero dodatkowej infrastruktury — dobry default, dopóki latencja 5 s nie boli.</p>
+
+<h3>5. API</h3>
+
+<p><strong>P: Minimal API zamiast kontrolerów — dlaczego?</strong></p>
+<p>O: Trzy endpointy — kontrolery nie wnoszą tu nic poza ceremoniałem. Handlery to statyczne metody z DI po parametrach, łatwo testowalne. Endpointy grupowane <code>MapGroup("/api/v1/prompts")</code> — wersjonowanie w ścieżce od pierwszego dnia.</p>
+
+<p><strong>P: Jak działa walidacja i co zwraca przy błędzie?</strong></p>
+<p>O: Ręczny statyczny walidator (limity: max 50 promptów, 8000 znaków po trim) zwracający słownik błędów per pole (<code>prompts[2]</code> → komunikat). Przy błędach <code>Results.ValidationProblem</code> → 400 z <code>ValidationProblemDetails</code> (RFC 7807/9457). Front dostaje maszynowo czytelną mapę błędów. FluentValidation byłby zasadny przy większej liczbie reguł; tu zewnętrzna zależność się nie broni.</p>
+
+<p><strong>P: Obsługa nieprzewidzianych wyjątków?</strong></p>
+<p>O: <code>IExceptionHandler</code> (nowość .NET 8+) zarejestrowany przez <code>AddExceptionHandler</code> + <code>AddProblemDetails</code>: loguje i zwraca 500 jako ProblemDetails z generycznym tytułem — szczegóły wyjątku nie wyciekają do klienta, każdy błąd API ma jeden spójny format.</p>
+
+<p><strong>P: Czemu enumy serializują się jako <code>"pending"</code>, a nie <code>0</code>?</strong></p>
+<p>O: <code>JsonStringEnumConverter</code> z camelCase policy. Kontrakt jest samoopisujący i stabilny (int zależy od kolejności w enumie), a frontendowy union type <code>'pending' | 'processing' | ...</code> mapuje się 1:1 bez tablicy tłumaczeń.</p>
+
+<p><strong>P: DTO (<code>PromptResponse</code>) zamiast zwracania encji — po co?</strong></p>
+<p>O: Encja domenowa nie wycieka poza granicę API — kontrakt HTTP jest oddzielony od modelu wewnętrznego, mogę zmieniać domenę bez łamania klientów. Rekordy C# jako DTO: zwięzłe, immutable.</p>
+
+<p><strong>P: POST przyjmuje batch promptów. Co się stanie, gdy jeden z nich jest niepoprawny?</strong></p>
+<p>O: Walidacja całego żądania przed jakimkolwiek zapisem — all-or-nothing. Wszystkie zapisy idą w jednym <code>SaveChangesAsync</code>, czyli jednej transakcji: nie ma częściowo zapisanego batcha.</p>
+
+<h3>6. Testy</h3>
+
+<p><strong>P: Jak przetestowane jest API?</strong></p>
+<p>O: Dwupoziomowo. Unit testy walidatora — czysta logika, bez hosta. Testy integracyjne przez <code>WebApplicationFactory&lt;Program&gt;</code> (stąd <code>public partial class Program</code> na końcu Program.cs) z prawdziwym Postgresem z Testcontainers — testują pełny potok HTTP→EF→baza, nie mocka bazy.</p>
+
+<p><strong>P: Czemu Testcontainers, a nie InMemory provider EF Core?</strong></p>
+<p>O: InMemory nie jest relacyjną bazą — nie egzekwuje constraintów, ma inną semantykę transakcji i zapytań, więc test może przejść na czymś, co na Postgresie się wywali. A ten projekt używa cech konkretnego silnika: konwersja enuma na string (<code>HasConversion</code>), natywny typ <code>uuid</code>, <code>MaxLength</code> na statusie. Testcontainers stawia w locie prawdziwego, izolowanego Postgresa w Dockerze — testuję dokładnie to środowisko, które idzie na produkcję. Koszt: testy wymagają Dockera i są wolniejsze, dlatego szybka logika ma osobne unit testy.</p>
+
+<p><strong>P: Jak testujesz workera bez prawdziwej Ollamy?</strong></p>
+<p>O: Worker zależy od <code>IChatClient</code> (Microsoft.Extensions.AI) — w testach podstawiam <code>FakeChatClient</code> z zaprogramowanymi odpowiedziami/wyjątkami. Do unit testów procesora jest też <code>InMemoryPromptRepository</code>. Testuję logikę: przejścia stanów, retry, recovery — nie framework.</p>
+
+<p><strong>P: Co daje projekt <code>TestSupport</code>?</strong></p>
+<p>O: Współdzielone buildery testowe (<code>PromptBuilder</code>, builder requestów), fake'i i asercje ProblemDetails — DRY między projektami testowymi, testy czytają się jak scenariusze.</p>
+
+<h3>7. Docker / infrastruktura</h3>
+
+<p><strong>P: Jak wygląda orkiestracja startu? Skąd pewność, że worker nie ruszy przed bazą i modelem?</strong></p>
+<p>O: Łańcuch <code>depends_on</code> z warunkami: postgres i ollama mają healthchecki; API czeka na <code>postgres: service_healthy</code>, a worker na <code>api: service_healthy</code> (API healthy = schemat zmigrowany) <strong>i</strong> <code>ollama-pull: service_completed_successfully</code> (model pobrany — one-shot kontener). Do tego worker ma własny runtime'owy wait na gotowość modelu, bo healthcheck to nie wszystko.</p>
+
+<p><strong>P: Czemu Postgres na hoście wystawiony na 5433?</strong></p>
+<p>O: Na maszynach dev często działa natywny Postgres na 5432 — mapping <code>5433:5432</code> unika konfliktu. Wewnątrz sieci compose kontenery dalej rozmawiają po 5432; różnica dotyczy tylko hosta.</p>
+
+<p><strong>P: Skąd aplikacja bierze konfigurację i jak zachowuje się przy jej braku?</strong></p>
+<p>O: <code>appsettings.json</code> + zmienne środowiskowe (env nadpisuje; konwencja <code>__</code> = <code>:</code>; w compose np. <code>ConnectionStrings__PromptQueue</code>, <code>Worker__OllamaModel</code>). Fail-fast: brak connection stringa albo <code>Worker:OllamaBaseUrl</code> rzuca przy starcie — lepiej ubić kontener natychmiast niż odkryć brak konfiguracji przy pierwszym requeście.</p>
+
+<p><strong>P: Wymiana Ollamy na OpenAI/Claude — ile pracy?</strong></p>
+<p>O: Mała — worker zna tylko <code>IChatClient</code> (Microsoft.Extensions.AI), <code>OllamaApiClient</code> to szczegół rejestracji w DI. Podmieniam jedną linię rejestracji na klienta OpenAI + konfiguracja klucza; logika przetwarzania nietknięta.</p>
+
+<h3>8. Pytania „gwiazdkowe" (senior / dyskusja)</h3>
+
+<p><strong>P: <code>DateTime.UtcNow</code> wprost w encji — co z tym nie tak?</strong></p>
+<p>O: Utrudnia testowanie czasu (nie zamrozisz zegara) — czystszy design wstrzykuje <code>TimeProvider</code> (.NET 8+). Tu świadomy pragmatyzm: timestampy są informacyjne, żadna logika od nich nie zależy, więc abstrakcja czasu byłaby kosztem bez zysku. Wiedzieć kiedy warto — to jest sedno tego pytania.</p>
+
+<p><strong>P: <code>GetAllAsync</code> zwraca całą tabelę. Kiedy to się zepsuje i co zrobisz?</strong></p>
+<p>O: Przy tysiącach promptów response puchnie, a front polluje co kilka sekund. Rozwiązania po kolei: paginacja (limit/offset albo keyset po <code>CreatedAt, Id</code> — keyset stabilny przy wstawkach), filtrowanie po statusie, ewentualnie <code>If-None-Match</code>/ETag żeby polling nie przesyłał niezmienionych danych. Deterministyczny <code>ThenBy(Id)</code> już jest — to warunek sensownej paginacji.</p>
+
+<p><strong>P: Gdzie w tym systemie może dojść do utraty lub podwójnego wykonania promptu?</strong></p>
+<p>O: Utraty — nigdzie: każde przejście stanu jest persystowane przed kolejnym krokiem. Podwójne wykonanie — tak: worker pada po wywołaniu modelu, ale przed <code>SaveChanges</code> z <code>Complete</code> → recovery cofa do <code>Pending</code> → drugi przebieg. To at-least-once; exactly-once wymagałoby transakcyjnego outboxa albo idempotencji po stronie efektu, co dla odpowiedzi LLM nie ma sensu.</p>
+
+<p><strong>P: Brakuje indeksu na <code>Status</code>, a worker filtruje po nim co 5 sekund. Problem?</strong></p>
+<p>O: Przy małej tabeli seq scan jest tani i Postgres i tak by go wybrał. Przy wzroście: partial index <code>WHERE status = 'Pending'</code> — mały i idealny pod to zapytanie, bo prompty terminalne dominują w tabeli. Dobra odpowiedź pokazuje, że indeks to decyzja pod rozkład danych, nie odruch.</p>
+
+<p><strong>P: Bezpieczeństwo — czego temu API brakuje do produkcji?</strong></p>
+<p>O: Autentykacji/autoryzacji (każdy może POST-ować), rate limitingu (<code>AddRateLimiter</code> — jeden klient może zapchać kolejkę i GPU), HTTPS na brzegu, limitu rozmiaru body. Walidacja wejścia i brak wycieku szczegółów błędów już są. W demo to świadomie pominięte — ale trzeba umieć wymienić listę.</p>
+
+<hr/>
+
+<h2>Część II — Frontend (React + TypeScript)</h2>
+
+<h3>1. Architektura frontendu</h3>
+
+<p><strong>P: Opisz strukturę katalogów. Czym kierowałeś się przy podziale?</strong></p>
+<p>O: Cztery warstwy: <code>api/</code> (klient HTTP + typowane kontrakty), <code>components/UI/</code> (czyste, reużywalne prezentacyjne: Button, TextArea, Alert, StatusBadge), <code>features/prompts/</code> (komponenty domenowe składające UI), <code>hooks/</code> (cała logika stanu i side-effectów). Komponenty featurowe nie gadają z API bezpośrednio — robią to hooki. Każdy komponent/hook to folder z kolokowanym testem i <code>.module.css</code> — wszystko, co go dotyczy, jest obok.</p>
+
+<p><strong>P: Czemu Vite + React SPA, a nie Next.js?</strong></p>
+<p>O: Backend w C# jest właścicielem danych i API, SEO/SSR nie występuje, a odświeżanie to client-side polling — SSR nic by nie dał, a dodałby serwer Node do orkiestracji. SPA serwowane przez nginx to najprostszy fit. Umiem uzasadnić, kiedy bym to zmienił: wymóg SEO albo SSR.</p>
+
+<p><strong>P: Nie widzę Reduxa ani React Query. Jak zarządzasz stanem i czemu bez bibliotek?</strong></p>
+<p>O: Stan serwerowy żyje w dwóch custom hookach na <code>useReducer</code> (<code>usePromptPolling</code>, <code>useCreatePrompts</code>), stan formularza w trzecim (<code>usePromptFields</code>). Przy jednym widoku i jednym zasobie biblioteka to koszt bez zysku. React Query wchodzi, gdy pojawia się wiele zasobów, cache między widokami, deduplikacja żądań — wtedy sam bym po niego sięgnął, bo mój polling to ręczna implementacja wycinka tego, co on daje.</p>
+
+<h3>2. Hooki / cykl życia</h3>
+
+<p><strong>P: W <code>usePromptPolling</code> użyłeś rekursywnego <code>setTimeout</code>, a nie <code>setInterval</code>. Dlaczego?</strong></p>
+<p>O: <code>setInterval</code> odpala żądania sztywno co X sekund, nie interesując się, czy poprzednie wróciło — przy wolnym backendzie żądania nakładają się i zalewają serwer (request piling). Rekursywny <code>setTimeout</code> planuje następny tick dopiero po zakończeniu poprzedniego (sukcesem lub błędem), więc w locie jest zawsze co najwyżej jedno żądanie, a interwał to gwarantowana przerwa między żądaniami.</p>
+
+<p><strong>P: Co się dzieje z pollingiem, gdy komponent się odmontuje w trakcie żądania?</strong></p>
+<p>O: Cleanup <code>useEffect</code> robi trzy rzeczy: <code>cancelled = true</code> (strażnik — nawet jeśli promise się rozwiąże, nie będzie <code>dispatch</code> na odmontowanym komponencie ani kolejnego timera), <code>controller.abort()</code> (ubija żądanie in-flight na poziomie sieci przez <code>AbortController</code>), <code>clearTimeout</code> (kasuje zaplanowany tick). Flaga i abort się uzupełniają: abort anuluje sieć, flaga chroni przed późnym <code>dispatch</code>, gdy response zdążył wrócić.</p>
+
+<p><strong>P: Jak działa <code>refetch</code>? Widzę tam licznik <code>trigger</code> — po co ten trik?</strong></p>
+<p>O: <code>refetch</code> inkrementuje stan <code>trigger</code>, który jest zależnością <code>useEffect</code> — zmiana restartuje cały efekt: cleanup ubija stary cykl (timer + żądanie), nowy zaczyna od natychmiastowego ticka. Dostaję „odśwież teraz" bez duplikowania logiki i bez ryzyka dwóch równoległych pętli. Używa tego formularz po udanym POST, żeby nowe prompty pojawiły się na liście od razu, a nie po 2 s.</p>
+
+<p><strong>P: Aplikacja jest w <code>StrictMode</code>. Co on robi z twoim efektem pollingu i czemu to działa?</strong></p>
+<p>O: W dev StrictMode montuje komponent podwójnie: mount → cleanup → mount, żeby wykryć efekty bez sprzątania. Mój efekt to przeżywa, bo cleanup jest kompletny — pierwszy cykl zostaje w pełni ubity (flaga, abort, clearTimeout), zanim ruszy drugi. Gdyby cleanupu brakowało, miałbym dwie pętle pollingu i to jest dokładnie ta klasa bugów, którą StrictMode ma ujawniać.</p>
+
+<p><strong>P: Czemu <code>useReducer</code> zamiast kilku <code>useState</code>?</strong></p>
+<p>O: Stan pollingu (<code>prompts</code>+<code>status</code>+<code>error</code>) zmienia się zawsze razem i przejścia są zdarzeniami (<code>success</code>/<code>error</code>) — reducer trzyma te przejścia w jednej czystej funkcji, którą testuję bez renderowania. Przy trzech powiązanych <code>useState</code> łatwo o niespójny stan pośredni. Formularz (<code>usePromptFields</code>) analogicznie: operacje add/remove/change/reset na liście pól to naturalne akcje.</p>
+
+<p><strong>P: Po błędzie pollingu lista promptów nie znika. Celowe?</strong></p>
+<p>O: Tak — reducer przy <code>error</code> zachowuje ostatnie dane (stale-while-error), zmienia tylko status i komunikat. Użytkownik widzi listę i pasek błędu zamiast pustego ekranu, a kolejny tick i tak leci — polling sam się leczy po przejściowym błędzie sieci.</p>
+
+<h3>3. Formularz / komponenty</h3>
+
+<p><strong>P: Skąd <code>key={field.id}</code> z <code>crypto.randomUUID()</code>, a nie index?</strong></p>
+<p>O: Pola można usuwać ze środka listy. Przy <code>key={index}</code> po usunięciu pola React skleja stan DOM (fokus, pozycja kursora) z niewłaściwym polem, bo indeksy się przesuwają. Stabilny identyfikator nadany przy utworzeniu pola jednoznacznie wiąże element z jego danymi przez cały cykl życia.</p>
+
+<p><strong>P: Czemu nie da się usunąć ostatniego pola i gdzie ta reguła siedzi?</strong></p>
+<p>O: W reducerze (<code>remove</code> zwraca stan bez zmian przy <code>length &lt;= 1</code>), nie w komponencie — reducer jest SSOT reguł listy pól. Powód praktyczny: pusta lista → pusty POST → gwarantowane 400. Reguła w reducerze jest przetestowana jednostkowo i żaden komponent jej nie obejdzie.</p>
+
+<p><strong>P: Jak zbudowany jest <code>TextArea</code>? Co daje <code>extends TextareaHTMLAttributes</code>?</strong></p>
+<p>O: Przezroczysty wrapper: rozszerzam natywne propsy o <code>invalid</code>, resztę przekazuję przez spread — komponent przyjmuje wszystko, co natywna textarea (placeholder, disabled, onChange), bez ręcznego przepisywania propsów. <code>invalid</code> steruje klasą CSS i <code>aria-invalid</code> — stylowanie i dostępność z jednego propa.</p>
+
+<p><strong>P: W CSS textarea jest <code>field-sizing: content</code>. Co to robi?</strong></p>
+<p>O: Natywna właściwość CSS (Chromium 123+): textarea sama rośnie i kurczy się z treścią — zero JS, zero mierzenia scrollHeight, zero bibliotek. <code>min/max-height</code> ograniczają zakres i robią za fallback dla przeglądarek bez wsparcia, a <code>resize: vertical</code> zostaje jako ręczna furtka. Progressive enhancement: tam, gdzie property nie działa, textarea jest po prostu stała, ale w pełni używalna.</p>
+
+<p><strong>P: <code>StatusBadge</code> używa słownika <code>Record&lt;PromptStatus, string&gt;</code> zamiast switcha. Różnica?</strong></p>
+<p>O: <code>Record</code> po unii wymusza kompletność w compile-time — gdy backend dostanie piąty status i poszerzę union, TypeScript nie skompiluje słownika bez nowego klucza. Switch bez <code>default</code> z exhaustive checkiem tego nie da, a z <code>default</code> cicho przepuści. Krócej i bezpieczniej.</p>
+
+<p><strong>P: Walidacja pustych pól odpala się dopiero po pierwszej próbie wysłania. Czemu?</strong></p>
+<p>O: Flaga <code>submitAttempted</code> — świadomy wybór UX: nie krzyczę czerwoną ramką na użytkownika, który dopiero otworzył formularz z pustym polem. Po pierwszym submit walidacja jest już „live", bo <code>invalid</code> liczy się z aktualnej wartości przy każdym renderze.</p>
+
+<h3>4. Warstwa API / TypeScript</h3>
+
+<p><strong>P: Jak frontend obsługuje błędy z API? Widzę interceptor axiosa.</strong></p>
+<p>O: Backend zwraca wszystkie błędy jako ProblemDetails (RFC 7807). Interceptor mapuje każdy <code>AxiosError</code> na własny <code>ApiError</code> (status, message z <code>title</code>, <code>validationErrors</code> z <code>errors</code>) — reszta aplikacji zna jeden typ błędu i nie wie nic o axiosie. Samo mapowanie to czysta funkcja <code>toApiError</code>, testowalna bez sieci. Status <code>0</code> oznacza błąd sieciowy — wtedy pokazuję generyczny komunikat po polsku zamiast surowego „Network Error".</p>
+
+<p><strong>P: Jak zapewniasz zgodność typów frontu z kontraktem backendu?</strong></p>
+<p>O: Ręcznie utrzymywane typy w <code>api/types.ts</code> lustrzane do C# recordów; statusy to union <code>'pending' | 'processing' | ...</code>, bo backend serializuje enumy jako camelCase stringi — mapowanie 1:1 bez tłumaczeń. Przy większym API wygenerowałbym typy z OpenAPI, żeby dryf kontraktu wykrywał się sam; przy trzech endpointach ręczne typy są tańsze.</p>
+
+<p><strong>P: Co robi <code>satisfies CreatePromptsRequest</code> w <code>prompts.ts</code>?</strong></p>
+<p>O: Sprawdza zgodność literału z typem bez rzutowania i bez poszerzania typu — w odróżnieniu od <code>as</code>, który by przemilczał brakujące pole, i od anotacji <code>:</code>, która utrąca wnioskowanie. Literówka w nazwie pola requesta to błąd kompilacji.</p>
+
+<h3>5. Testy</h3>
+
+<p><strong>P: Jak testujesz hook z timerami i siecią, jak <code>usePromptPolling</code>?</strong></p>
+<p>O: <code>renderHook</code> z Testing Library, <code>vi.mock</code> na module API (hook nie wie, że nie ma sieci), <code>vi.useFakeTimers</code> + <code>advanceTimersByTime(2000)</code> — testuję kolejne ticki bez realnego czekania. Kluczowe przypadki: pierwszy fetch, re-schedule po interwale, zachowanie danych przy błędzie i samowyleczenie, oraz unmount — asercja, że po odmontowaniu licznik wywołań nie rośnie i <code>signal.aborted === true</code>.</p>
+
+<p><strong>P: Czemu Vitest, a nie Jest?</strong></p>
+<p>O: Ten sam pipeline transformacji co Vite (config w jednym <code>vite.config.ts</code>, blok <code>test</code>), natywne ESM i TS bez babela, kompatybilne API. W projekcie na Vite Jest wymagałby osobnej konfiguracji transformacji tylko po to, żeby zrobić to samo wolniej.</p>
+
+<p><strong>P: Testujecie implementację czy zachowanie?</strong></p>
+<p>O: Zachowanie: testy hooków patrzą na zwracany stan i wywołania API, testy komponentów (Testing Library) na to, co widzi użytkownik. Reducery testuję jako czyste funkcje — wejście/wyjście. Nie asertuję szczegółów wewnętrznych, więc refaktor implementacji nie kładzie testów.</p>
+
+<h3>6. Build / deployment</h3>
+
+<p><strong>P: Opisz Dockerfile frontendu. Czemu multi-stage?</strong></p>
+<p>O: Stage 1: <code>node:20-alpine</code>, <code>npm ci</code>, <code>npm run build</code> (tsc + vite). Stage 2: <code>nginx:1.27-alpine</code> dostaje tylko <code>dist/</code> i konfig. W obrazie produkcyjnym nie ma Node, node_modules ani źródeł — mniejszy obraz i mniejsza powierzchnia ataku. <code>npm ci</code> zamiast <code>install</code>: instaluje dokładnie z lockfile'a, fail przy dryfie — powtarzalny build.</p>
+
+<p><strong>P: Do czego służy <code>try_files $uri $uri/ /index.html</code> w nginx?</strong></p>
+<p>O: SPA fallback: żądanie, które nie trafia w istniejący plik statyczny, dostaje <code>index.html</code>, a routing przejmuje JS. Bez tego deep-link albo refresh na podścieżce dawałby 404 z nginxa. Tu jest jeden widok, ale to standard, który nie może zniknąć w dniu dodania routera.</p>
+
+<p><strong>P: Frontend woła API przez <code>/api</code> na własnym originie zamiast bezpośrednio. Dlaczego?</strong></p>
+<p>O: Nginx proxuje <code>/api/</code> → <code>api:8080</code>, więc przeglądarka rozmawia z jednym originem — CORS i preflighty znikają z produkcji, na zewnątrz wystawiony jest jeden port, a API nie musi być publiczne. Do tego dev/prod parity: w dev identyczne proxy robi Vite (<code>server.proxy</code> → <code>localhost:5269</code>), więc kod aplikacji używa względnych ścieżek i niczego nie przełącza między środowiskami.</p>
+
+<p><strong>P: Jak działa <code>VITE_API_BASE_URL</code> i jakie ma ograniczenie?</strong></p>
+<p>O: <code>import.meta.env</code> jest wstrzykiwane w czasie <strong>builda</strong> — Vite zapieka wartość w bundlu, to nie jest runtime env jak w backendzie. Tu domyślnie pusty string (ścieżki względne + proxy), więc jeden obraz działa wszędzie; gdybym potrzebował różnych URL-i per środowisko z jednego obrazu, dałbym config wstrzykiwany w runtime (np. plik generowany na starcie kontenera).</p>
+
+<h3>7. Pytania „gwiazdkowe" (senior / dyskusja)</h3>
+
+<p><strong>P: Polling ściąga całą listę co 2 s, nawet gdy wszystko jest <code>completed</code>. Obroń to albo popraw.</strong></p>
+<p>O: Świadoma decyzja (jest na to test: „always-poll") — nowe prompty może dodać inna karta/klient, więc lista nigdy nie jest „skończona", a warunkowe zatrzymywanie pollingu to nowa klasa bugów. Optymalizacje po kolei, gdy zaboli: dłuższy interwał z backoffem gdy brak aktywnych statusów, <code>If-None-Match</code>/ETag (304 zamiast pełnego body), delta-endpoint <code>?since=updatedAt</code>, na końcu SSE/websockety — każda podnosi złożoność, więc wchodzi dopiero za dowodem potrzeby.</p>
+
+<p><strong>P: Nie widzę <code>React.memo</code> ani <code>useCallback</code>. Zaniedbanie?</strong></p>
+<p>O: Decyzja. Lista ma dziesiątki elementów renderujących tanie DOM-owe węzły — re-render co tick jest niezauważalny, a memoizacja to koszt złożoności i sama nie jest darmowa (porównania propsów, utrzymanie stabilnych referencji). Reguła: najpierw pomiar (Profiler), potem memo. Gdyby lista urosła do tysięcy — najpierw wirtualizacja, nie memo.</p>
+
+<p><strong>P: Co się stanie, gdy użytkownik kliknie „Wyślij" i natychmiast poleci <code>refetch</code>, a w locie wisi tick pollingu?</strong></p>
+<p>O: Nic złego — <code>refetch</code> zmienia <code>trigger</code>, React robi cleanup starego efektu (abort in-flight żądania, clearTimeout) zanim uruchomi nowy. Konstrukcyjnie nie ma dwóch równoległych pętli ani race'a stary-response-nadpisuje-nowy, bo stary cykl jest martwy (flaga <code>cancelled</code>) zanim nowy wystartuje.</p>
+
+<p><strong>P: Formularz robi refetch po sukcesie. Czemu nie optimistic update — dokleić prompty do listy lokalnie?</strong></p>
+<p>O: POST zwraca tylko <code>ids</code> + status, a właścicielem listy jest hook pollingu — doklejanie lokalne tworzy drugi source of truth i ryzyko rozjazdu (kolejność z serwera to <code>CreatedAt</code>). Refetch po sukcesie daje spójność za cenę jednego żądania, a najdalej po 2 s polling i tak by to pokazał. Optimistic UI ma sens przy wolnych mutacjach i wymaganiu natychmiastowości — tu nie ma żadnego z tych warunków.</p>
+
+<p><strong>P: Gdzie ten frontend najszybciej „urośnie z butów" i co byś wtedy zmienił?</strong></p>
+<p>O: Trzy miejsca: (1) drugi widok/zasób → React Query zamiast ręcznego pollingu; (2) routing → React Router, <code>try_files</code> już na to gotowy; (3) rosnąca lista → paginacja na API (backend ma deterministyczny sort, czyli fundament) + wirtualizacja listy. Architektura tego nie blokuje: logika już siedzi w hookach, więc wymiana warstwy danych nie dotyka komponentów.</p>
+
+<hr/>
+
+<h2>Protip na pytanie „jak to powstało tak szybko?"</h2>
+<p>Nie mów „wkleiłem prompt do AI". Powiedz: pracowałem agentowo (Claude Code) z własnym procesem — zdefiniowałem w repo skille z konwencjami kodu (<code>.claude/skills/</code>), agentów o rolach architekt/implementator/krytyk/reviewer, i pełną dekompozycję techniczną w <code>doc/projects/</code>. AI odwaliło boilerplate, a decyzje architektoniczne — te, o które teraz pytacie — były moje i umiem każdą obronić. To zamienia „użył AI" z zarzutu w kompetencję.</p>
